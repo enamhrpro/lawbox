@@ -466,6 +466,7 @@ function Cases({ user }) {
 
   const types = [...new Set(cases.map(c => c.type))];
   const filtered = cases.filter(c => {
+    if (user.role === 'client' && c.client.toLowerCase() !== user.name.toLowerCase()) return false;
     if (filterStatus !== 'all' && c.status !== filterStatus) return false;
     if (filterType !== 'all' && c.type !== filterType) return false;
     if (search) {
@@ -526,10 +527,12 @@ function Cases({ user }) {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => edit(c)} style={{ ...S.btn, ...S.btnPrimary }}><Edit size={13} /> Edit Case</button>
-          <button onClick={() => del(c.id)} style={{ ...S.btn, ...S.btnDanger }}><Trash2 size={13} /> Delete</button>
-        </div>
+        {['admin', 'advocate'].includes(user.role) && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => edit(c)} style={{ ...S.btn, ...S.btnPrimary }}><Edit size={13} /> Edit Case</button>
+            {user.role === 'admin' && <button onClick={() => del(c.id)} style={{ ...S.btn, ...S.btnDanger }}><Trash2 size={13} /> Delete</button>}
+          </div>
+        )}
       </div>
     );
   }
@@ -583,8 +586,8 @@ function Cases({ user }) {
               <td style={S.td}><StatusBadge status={c.status} /></td>
               <td style={S.td} onClick={e => e.stopPropagation()}>
                 <div style={{ display: 'flex', gap: 4 }}>
-                  <button onClick={() => edit(c)} style={{ ...S.btnGhost, color: 'var(--gold-dim)' }}><Edit size={13} /></button>
-                  {['admin'].includes(user.role) && <button onClick={() => del(c.id)} style={{ ...S.btnGhost, color: 'var(--danger)' }}><Trash2 size={13} /></button>}
+                  {['admin', 'advocate'].includes(user.role) && <button onClick={() => edit(c)} style={{ ...S.btnGhost, color: 'var(--gold-dim)' }}><Edit size={13} /></button>}
+                  {user.role === 'admin' && <button onClick={() => del(c.id)} style={{ ...S.btnGhost, color: 'var(--danger)' }}><Trash2 size={13} /></button>}
                 </div>
               </td>
             </tr>
