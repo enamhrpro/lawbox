@@ -614,7 +614,7 @@ function Cases({ user }) {
                     {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 ) : (
-                  <input style={S.input} type={f.type || 'text'} value={form[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })} />
+                  <input style={S.input} type={f.type || 'text'} value={form[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value }))} />
                 )}
               </div>
             ))}
