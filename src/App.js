@@ -466,7 +466,6 @@ function Cases({ user }) {
 
   const types = [...new Set(cases.map(c => c.type))];
   const filtered = cases.filter(c => {
-    if (user.role === 'client' && c.client.toLowerCase() !== user.name.toLowerCase()) return false;
     if (filterStatus !== 'all' && c.status !== filterStatus) return false;
     if (filterType !== 'all' && c.type !== filterType) return false;
     if (search) {
