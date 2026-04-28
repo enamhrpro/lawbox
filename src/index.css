@@ -1,0 +1,64 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --gold: #c9a84c;
+  --gold-light: #f0d080;
+  --gold-dim: #8a6d28;
+  --navy: #0d1b2a;
+  --navy-mid: #1a2d42;
+  --navy-light: #243b55;
+  --surface: #111927;
+  --surface-mid: #1c2b3a;
+  --surface-light: #243347;
+  --text: #e8dfc8;
+  --text-muted: #8a9ab0;
+  --text-dim: #4a5a6a;
+  --border: rgba(201,168,76,0.15);
+  --border-mid: rgba(201,168,76,0.25);
+  --danger: #e05252;
+  --success: #4caf7d;
+  --info: #4a9eda;
+  --font: 'IBM Plex Sans', sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+  --radius: 6px;
+  --radius-lg: 10px;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--navy);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--navy); }
+::-webkit-scrollbar-thumb { background: var(--navy-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold-dim); }
+
+input, select, textarea {
+  font-family: var(--font);
+  background: var(--surface-mid);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--gold-dim); }
+input::placeholder, textarea::placeholder { color: var(--text-dim); }
+select option { background: var(--surface-mid); }
+
+button {
+  font-family: var(--font);
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all 0.15s;
+}
+
+* { transition: background-color 0.15s, border-color 0.15s; }
