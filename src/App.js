@@ -194,9 +194,12 @@ function Modal({ title, onClose, children, wide }) {
 
 // ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
 function LoginPage({ onLogin }) {
-  const [email, setEmail] = useState('admin@lawbox.bd');
-  const [pass, setPass] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [pass, setPass] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [err, setErr] = useState('');
+  const [showSaas, setShowSaas] = useState(false);
+  const chambers = getStorage('lb_chambers', [{ id: 'default', name: 'LawBox Legal Associates', slug: 'default', plan: 'Pro', created: '2024-01-01' }]);
   const users = getStorage('lb_users', INITIAL_USERS);
 
   const handle = (e) => {
@@ -207,38 +210,60 @@ function LoginPage({ onLogin }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--navy)' }}>
-      <div style={{ width: 360 }}>
+      <div style={{ width: 400 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 }}>
             <Scale size={28} style={{ color: 'var(--gold)' }} />
             <span style={{ fontSize: 26, fontWeight: 700, color: 'var(--gold-light)', letterSpacing: '0.05em' }}>LAWBOX</span>
           </div>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Legal Practice Management System</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Legal Practice Management · SaaS Platform</p>
         </div>
+
+        {/* Chamber selector */}
+        <div style={{ marginBottom: 12, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {chambers.map(ch => (
+            <div key={ch.id} style={{ padding: '4px 12px', borderRadius: 12, border: '1px solid var(--border-mid)', fontSize: 12, color: 'var(--gold-dim)', background: 'rgba(201,168,76,0.08)' }}>
+              🏛 {ch.name}
+            </div>
+          ))}
+          <button onClick={() => setShowSaas(true)} style={{ padding: '4px 12px', borderRadius: 12, border: '1px dashed var(--border-mid)', fontSize: 12, color: 'var(--text-dim)', background: 'transparent', cursor: 'pointer' }}>
+            + New Chamber
+          </button>
+        </div>
+
         <div style={{ ...S.card, borderColor: 'var(--border-mid)' }}>
-          <form onSubmit={handle} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <form onSubmit={handle} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={S.formGroup}>
-              <label style={S.label}>Email</label>
-              <input style={S.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter email" />
+              <label style={S.label}>Email Address</label>
+              <input style={S.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter your email" autoComplete="email" />
             </div>
             <div style={S.formGroup}>
               <label style={S.label}>Password</label>
-              <input style={S.input} type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="Enter password" />
+              <div style={{ position: 'relative' }}>
+                <input style={{ ...S.input, paddingRight: 40 }} type={showPass ? 'text' : 'password'} value={pass} onChange={e => setPass(e.target.value)} placeholder="Enter your password" autoComplete="current-password" />
+                <button type="button" onClick={() => setShowPass(p => !p)} style={{ position: 'absolute', right: 10, top: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 0 }}>
+                  <Eye size={15} />
+                </button>
+              </div>
             </div>
-            {err && <p style={{ color: 'var(--danger)', fontSize: 12 }}>{err}</p>}
+            {err && <p style={{ color: 'var(--danger)', fontSize: 12, margin: 0 }}>{err}</p>}
             <button type="submit" style={{ ...S.btn, ...S.btnPrimary, width: '100%', justifyContent: 'center', padding: '10px 14px', fontSize: 14 }}>
               Sign In
             </button>
           </form>
-          <div style={{ marginTop: 16, padding: '12px', background: 'var(--navy)', borderRadius: 6, fontSize: 11, color: 'var(--text-dim)' }}>
+          <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--navy)', borderRadius: 6, fontSize: 11, color: 'var(--text-dim)' }}>
             <strong style={{ color: 'var(--text-muted)' }}>Demo accounts:</strong><br />
-            admin@lawbox.bd / admin123 (Admin)<br />
-            advocate@lawbox.bd / adv123 (Advocate)<br />
-            clerk@lawbox.bd / clerk123 (Clerk)<br />
-            client@lawbox.bd / client123 (Client)
+            admin@lawbox.bd / admin123 · advocate@lawbox.bd / adv123<br />
+            clerk@lawbox.bd / clerk123 · client@lawbox.bd / client123
           </div>
         </div>
+
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: 'var(--text-dim)' }}>
+          Want your own chamber? <button onClick={() => setShowSaas(true)} style={{ background: 'none', border: 'none', color: 'var(--gold-dim)', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>Register here</button>
+        </div>
       </div>
+
+      {showSaas && <SaasRegisterModal onClose={() => setShowSaas(false)} />}
     </div>
   );
 }
@@ -254,6 +279,8 @@ const NAV = [
   { id: 'ai', label: 'AI Assistant', icon: Bot, roles: ['admin', 'advocate', 'clerk'] },
   { id: 'research', label: 'Legal Research', icon: BookOpen, roles: ['admin', 'advocate', 'clerk'] },
   { id: 'billing', label: 'Billing', icon: CreditCard, roles: ['admin', 'advocate'] },
+  { id: 'clientbilling', label: 'My Bills', icon: CreditCard, roles: ['client'] },
+  { id: 'chambers', label: 'Chambers', icon: Building, roles: ['admin'] },
   { id: 'admin', label: 'Admin Panel', icon: Settings, roles: ['admin'] },
 ];
 
@@ -339,9 +366,9 @@ function App() {
 
   if (!user) return <LoginPage onLogin={setUser} />;
 
-  const titles = { dashboard: 'Dashboard', cases: 'Case Management', calendar: 'Calendar & Hearings', causelist: 'Cause List', documents: 'Documents', docgen: 'Document Generator', ai: 'AI Legal Assistant', research: 'Legal Research', billing: 'Billing', admin: 'Admin Panel' };
+  const titles = { dashboard: 'Dashboard', cases: 'Case Management', calendar: 'Calendar & Hearings', causelist: 'Cause List', documents: 'Documents', docgen: 'Document Generator', ai: 'AI Legal Assistant', research: 'Legal Research', billing: 'Billing', admin: 'Admin Panel', clientbilling: 'My Bills', chambers: 'Chambers' };
 
-  const pages = { dashboard: Dashboard, cases: Cases, calendar: CalendarModule, causelist: CauseList, documents: Documents, docgen: DocGenerator, ai: AIAssistant, research: LegalResearch, billing: Billing, admin: AdminPanel };
+  const pages = { dashboard: Dashboard, cases: Cases, calendar: CalendarModule, causelist: CauseList, documents: Documents, docgen: DocGenerator, ai: AIAssistant, research: LegalResearch, billing: Billing, admin: AdminPanel, clientbilling: ClientBilling, chambers: ChambersModule };
   const PageComp = pages[page] || Dashboard;
 
   return (
@@ -377,8 +404,10 @@ function Dashboard({ user }) {
       <div style={{ ...S.grid4, marginBottom: 20 }}>
         <StatCard icon={FolderOpen} label="Active Cases" value={active} sub={`${cases.length} total`} color="var(--gold)" />
         <StatCard icon={Calendar} label="Upcoming Hearings" value={upcoming} sub="next 30 days" color="var(--info)" />
-        <StatCard icon={DollarSign} label="Total Billed" value={`৳${(billed / 1000).toFixed(0)}K`} sub="this year" color="var(--success)" />
-        <StatCard icon={Users} label="Clients" value={new Set(cases.map(c => c.client)).size} sub="active matters" color="#9664c8" />
+        {user.role !== 'client' && <StatCard icon={DollarSign} label="Total Billed" value={`৳${(billed / 1000).toFixed(0)}K`} sub="this year" color="var(--success)" />}
+        {user.role !== 'client' && <StatCard icon={Users} label="Clients" value={new Set(cases.map(c => c.client)).size} sub="active matters" color="#9664c8" />}
+        {user.role === 'client' && <StatCard icon={CreditCard} label="My Invoices" value={invoices.length} sub="total bills" color="var(--info)" />}
+        {user.role === 'client' && <StatCard icon={CheckCircle} label="Amount Paid" value={`৳${invoices.reduce((s,i)=>s+i.paid,0).toLocaleString()}`} sub="total paid" color="var(--success)" />}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 16, marginBottom: 20 }}>
@@ -434,12 +463,12 @@ function Dashboard({ user }) {
           ))}
         </div>
 
-        <div style={S.card}>
+        {user.role !== 'client' && <div style={S.card}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-light)', marginBottom: 12 }}>Financial Summary</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[
               { label: 'Total Billed', val: billed, color: 'var(--gold)' },
-              { label: 'Collected', val: collected, color: 'var(--success)' },
+              { label: 'Paid', val: collected, color: 'var(--success)' },
               { label: 'Outstanding', val: billed - collected, color: 'var(--danger)' },
             ].map(r => (
               <div key={r.label} style={{ ...S.flexBetween, padding: '8px 10px', background: 'var(--navy)', borderRadius: 6 }}>
@@ -448,7 +477,7 @@ function Dashboard({ user }) {
               </div>
             ))}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
@@ -1520,6 +1549,341 @@ function AdminPanel({ user }) {
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowAdd(false)} style={{ ...S.btn, ...S.btnSecondary }}>Cancel</button>
               <button onClick={addUser} style={{ ...S.btn, ...S.btnPrimary }}>Add User</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── CLIENT BILLING ───────────────────────────────────────────────────────────
+function ClientBilling({ user }) {
+  const invoices = getStorage('lb_invoices', INITIAL_INVOICES);
+  const cases = getStorage('lb_cases', INITIAL_CASES);
+  const settings = getStorage('lb_settings', { firmName: 'LawBox Legal Associates', jurisdiction: 'Bangladesh' });
+  const [selected, setSelected] = useState(null);
+
+  const inv = selected ? invoices.find(i => i.id === selected) : null;
+  const invCase = inv ? cases.find(c => c.id === inv.caseId) : null;
+
+  const printInvoice = () => {
+    const el = document.getElementById('invoice-print');
+    const w = window.open('', '_blank');
+    w.document.write(`<html><head><title>Invoice ${inv.id}</title><style>
+      body { font-family: Arial, sans-serif; padding: 40px; color: #111; }
+      .header { display: flex; justify-content: space-between; margin-bottom: 32px; border-bottom: 2px solid #c9a84c; padding-bottom: 16px; }
+      .firm { font-size: 22px; font-weight: 700; color: #8a6d28; }
+      .inv-id { font-size: 13px; color: #555; margin-top: 4px; }
+      .section { margin-bottom: 20px; }
+      .label { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 4px; }
+      .value { font-size: 14px; color: #111; }
+      table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+      th { background: #f5f0e8; padding: 10px; text-align: left; font-size: 12px; }
+      td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+      .total-row { font-weight: 700; font-size: 15px; }
+      .status-paid { color: green; font-weight: 600; }
+      .status-unpaid { color: red; font-weight: 600; }
+      .status-partial { color: orange; font-weight: 600; }
+      .footer { margin-top: 48px; border-top: 1px solid #ddd; padding-top: 16px; font-size: 11px; color: #888; text-align: center; }
+    </style></head><body>${el.innerHTML}</body></html>`);
+    w.document.close();
+    w.print();
+  };
+
+  if (inv) {
+    return (
+      <div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <button onClick={() => setSelected(null)} style={{ ...S.btn, ...S.btnSecondary }}><ChevronLeft size={14} /> Back</button>
+          <button onClick={printInvoice} style={{ ...S.btn, ...S.btnPrimary }}><Download size={14} /> Print / Download PDF</button>
+        </div>
+
+        <div id="invoice-print" style={{ ...S.card, maxWidth: 680, margin: '0 auto', padding: 32, borderColor: 'var(--border-mid)' }}>
+          <div className="header" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24, borderBottom: '2px solid var(--gold-dim)', paddingBottom: 16 }}>
+            <div>
+              <div className="firm" style={{ fontSize: 20, fontWeight: 700, color: 'var(--gold-light)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Scale size={20} /> {settings.firmName}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{settings.jurisdiction} · Legal Services</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--gold)', fontFamily: 'var(--mono)' }}>{inv.id}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Date: {inv.date}</div>
+              <StatusBadge status={inv.status} />
+            </div>
+          </div>
+
+          <div style={{ ...S.grid2, gap: 16, marginBottom: 24 }}>
+            <div style={{ padding: '12px 14px', background: 'var(--navy)', borderRadius: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>BILLED TO</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{inv.client}</div>
+            </div>
+            <div style={{ padding: '12px 14px', background: 'var(--navy)', borderRadius: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>CASE REFERENCE</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--gold-dim)', fontFamily: 'var(--mono)' }}>{inv.caseId}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{invCase?.title}</div>
+            </div>
+          </div>
+
+          <table style={S.table}>
+            <thead><tr>
+              <th style={{ ...S.th, background: 'rgba(201,168,76,0.08)' }}>Description</th>
+              <th style={{ ...S.th, background: 'rgba(201,168,76,0.08)', textAlign: 'right' }}>Amount (BDT)</th>
+            </tr></thead>
+            <tbody>
+              {inv.items && inv.items.length > 0 ? inv.items.map((item, i) => (
+                <tr key={i}>
+                  <td style={S.td}>{item.desc}</td>
+                  <td style={{ ...S.td, textAlign: 'right', fontFamily: 'var(--mono)' }}>৳{item.amount.toLocaleString()}</td>
+                </tr>
+              )) : (
+                <tr><td style={S.td}>Legal Services</td><td style={{ ...S.td, textAlign: 'right', fontFamily: 'var(--mono)' }}>৳{inv.amount.toLocaleString()}</td></tr>
+              )}
+              <tr>
+                <td style={{ ...S.td, fontWeight: 700, fontSize: 14 }}>Total</td>
+                <td style={{ ...S.td, fontWeight: 700, fontSize: 14, textAlign: 'right', color: 'var(--gold)', fontFamily: 'var(--mono)' }}>৳{inv.amount.toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td style={{ ...S.td, color: 'var(--success)' }}>Amount Paid</td>
+                <td style={{ ...S.td, textAlign: 'right', color: 'var(--success)', fontFamily: 'var(--mono)' }}>৳{inv.paid.toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td style={{ ...S.td, color: 'var(--danger)', fontWeight: 600 }}>Balance Due</td>
+                <td style={{ ...S.td, textAlign: 'right', color: 'var(--danger)', fontWeight: 600, fontFamily: 'var(--mono)' }}>৳{(inv.amount - inv.paid).toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          {inv.method && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>Payment Method: {inv.method}</div>
+          )}
+
+          <div style={{ marginTop: 32, paddingTop: 16, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
+            Thank you for choosing {settings.firmName} · This is a computer-generated invoice
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-light)', marginBottom: 16 }}>My Invoices</div>
+      {invoices.length === 0 ? (
+        <div style={{ ...S.card, textAlign: 'center', padding: 48, color: 'var(--text-dim)' }}>No invoices found</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {invoices.filter(i => i.amount > 0).map(inv => {
+            const c = cases.find(c => c.id === inv.caseId);
+            return (
+              <div key={inv.id} onClick={() => setSelected(inv.id)} style={{ ...S.card, cursor: 'pointer', borderColor: 'var(--border-mid)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--gold-dim)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-mid)'}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 8, background: 'rgba(201,168,76,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CreditCard size={18} style={{ color: 'var(--gold)' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--gold-dim)' }}>{inv.id}</div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{c?.title || inv.caseId}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{inv.date} · {inv.client}</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>৳{inv.amount.toLocaleString()}</div>
+                  <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 2 }}>Paid: ৳{inv.paid.toLocaleString()}</div>
+                  <div style={{ marginTop: 4 }}><StatusBadge status={inv.status} /></div>
+                </div>
+                <ChevronRight size={16} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SAAS REGISTER MODAL ─────────────────────────────────────────────────────
+function SaasRegisterModal({ onClose }) {
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ chamberName: '', adminName: '', email: '', password: '', phone: '', address: '', plan: 'starter', barId: '' });
+  const [done, setDone] = useState(false);
+
+  const plans = [
+    { id: 'starter', label: 'Starter', price: '৳999/mo', features: ['1 Advocate', '50 Cases', 'Basic Reports', 'Email Support'] },
+    { id: 'pro', label: 'Professional', price: '৳2,499/mo', features: ['5 Advocates', 'Unlimited Cases', 'Full Reports', 'AI Assistant', 'Priority Support'] },
+    { id: 'enterprise', label: 'Enterprise', price: '৳5,999/mo', features: ['Unlimited Advocates', 'Unlimited Cases', 'Custom Domain', 'API Access', 'Dedicated Support'] },
+  ];
+
+  const register = () => {
+    if (!form.chamberName || !form.email || !form.password) return;
+    const chambers = getStorage('lb_chambers', [{ id: 'default', name: 'LawBox Legal Associates', slug: 'default', plan: 'Pro', created: '2024-01-01' }]);
+    const newChamber = { id: Date.now().toString(), name: form.chamberName, slug: form.chamberName.toLowerCase().replace(/\s+/g, '-'), plan: form.plan, created: new Date().toISOString().split('T')[0], admin: form.adminName, email: form.email, phone: form.phone, address: form.address };
+    setStorage('lb_chambers', [...chambers, newChamber]);
+
+    const users = getStorage('lb_users', INITIAL_USERS);
+    const newUser = { id: Date.now(), name: form.adminName || form.chamberName + ' Admin', email: form.email, password: form.password, role: 'admin', active: true, barId: form.barId, chamber: newChamber.id };
+    setStorage('lb_users', [...users, newUser]);
+    setDone(true);
+  };
+
+  return (
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...S.modal, maxWidth: 560 }}>
+        <div style={{ ...S.flexBetween, marginBottom: 20 }}>
+          <div>
+            <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--gold-light)' }}>Register New Chamber</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>Create your legal practice on LawBox SaaS</p>
+          </div>
+          <button onClick={onClose} style={{ ...S.btnGhost }}><X size={16} /></button>
+        </div>
+
+        {done ? (
+          <div style={{ textAlign: 'center', padding: 32 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--gold-light)', marginBottom: 8 }}>Chamber Registered!</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>{form.chamberName} is now live on LawBox. Login with your email and password.</div>
+            <button onClick={onClose} style={{ ...S.btn, ...S.btnPrimary }}>Go to Login</button>
+          </div>
+        ) : (
+          <>
+            {/* Steps indicator */}
+            <div style={{ display: 'flex', gap: 0, marginBottom: 20 }}>
+              {['Chamber Info', 'Choose Plan', 'Admin Account'].map((s, i) => (
+                <div key={s} style={{ flex: 1, textAlign: 'center' }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', margin: '0 auto 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, background: step > i + 1 ? 'var(--success)' : step === i + 1 ? 'var(--gold)' : 'var(--navy)', color: step >= i + 1 ? 'var(--navy)' : 'var(--text-dim)', border: step === i + 1 ? 'none' : '1px solid var(--border)' }}>{step > i + 1 ? '✓' : i + 1}</div>
+                  <div style={{ fontSize: 10, color: step === i + 1 ? 'var(--gold)' : 'var(--text-dim)' }}>{s}</div>
+                </div>
+              ))}
+            </div>
+
+            {step === 1 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={S.formGroup}><label style={S.label}>Chamber / Firm Name *</label><input style={S.input} value={form.chamberName} onChange={e => setForm(p => ({ ...p, chamberName: e.target.value }))} placeholder="e.g. Rahman & Associates" /></div>
+                <div style={S.formGroup}><label style={S.label}>Office Address</label><input style={S.input} value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} placeholder="Dhaka, Bangladesh" /></div>
+                <div style={S.formGroup}><label style={S.label}>Phone</label><input style={S.input} value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+880 1XXX-XXXXXX" /></div>
+                <button onClick={() => form.chamberName && setStep(2)} style={{ ...S.btn, ...S.btnPrimary, alignSelf: 'flex-end' }}>Next →</button>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {plans.map(p => (
+                  <div key={p.id} onClick={() => setForm(f => ({ ...f, plan: p.id }))} style={{ ...S.card, cursor: 'pointer', borderColor: form.plan === p.id ? 'var(--gold)' : 'var(--border)', background: form.plan === p.id ? 'rgba(201,168,76,0.06)' : 'var(--surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: form.plan === p.id ? 'var(--gold)' : 'var(--text)' }}>{p.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>{p.features.join(' · ')}</div>
+                    </div>
+                    <div style={{ fontWeight: 700, color: 'var(--gold-light)', fontSize: 14, flexShrink: 0 }}>{p.price}</div>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+                  <button onClick={() => setStep(1)} style={{ ...S.btn, ...S.btnSecondary }}>← Back</button>
+                  <button onClick={() => setStep(3)} style={{ ...S.btn, ...S.btnPrimary }}>Next →</button>
+                </div>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={S.formGroup}><label style={S.label}>Admin Full Name *</label><input style={S.input} value={form.adminName} onChange={e => setForm(p => ({ ...p, adminName: e.target.value }))} placeholder="Adv. Your Name" /></div>
+                <div style={S.formGroup}><label style={S.label}>Email Address *</label><input style={S.input} type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="admin@yourchamber.com" /></div>
+                <div style={S.formGroup}><label style={S.label}>Password *</label><input style={S.input} type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Set a strong password" /></div>
+                <div style={S.formGroup}><label style={S.label}>Bar Council ID (optional)</label><input style={S.input} value={form.barId} onChange={e => setForm(p => ({ ...p, barId: e.target.value }))} placeholder="BAR-XXXX-XXX" /></div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+                  <button onClick={() => setStep(2)} style={{ ...S.btn, ...S.btnSecondary }}>← Back</button>
+                  <button onClick={register} style={{ ...S.btn, ...S.btnPrimary }}>🚀 Register Chamber</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── CHAMBERS MODULE (Admin) ──────────────────────────────────────────────────
+function ChambersModule({ user }) {
+  const [chambers, setChambers] = useLocalState('lb_chambers', [{ id: 'default', name: 'LawBox Legal Associates', slug: 'default', plan: 'Pro', created: '2024-01-01', admin: 'Adv. Rahim Uddin', email: 'admin@lawbox.bd', phone: '+880 1700-000000', address: 'Dhaka, Bangladesh' }]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ name: '', admin: '', email: '', phone: '', address: '', plan: 'starter' });
+
+  const plans = { starter: { label: 'Starter', color: 'var(--info)' }, pro: { label: 'Professional', color: 'var(--gold)' }, enterprise: { label: 'Enterprise', color: '#9664c8' } };
+
+  const add = () => {
+    if (!form.name) return;
+    setChambers(p => [...p, { ...form, id: Date.now().toString(), slug: form.name.toLowerCase().replace(/\s+/g, '-'), created: new Date().toISOString().split('T')[0] }]);
+    setShowAdd(false);
+    setForm({ name: '', admin: '', email: '', phone: '', address: '', plan: 'starter' });
+  };
+
+  const del = (id) => { if (id === 'default') return alert('Cannot delete default chamber'); setChambers(p => p.filter(c => c.id !== id)); };
+
+  return (
+    <div>
+      <div style={{ ...S.flexBetween, marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--gold-light)' }}>Chambers / Law Firms</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Manage all registered chambers on this LawBox instance</div>
+        </div>
+        <button onClick={() => setShowAdd(true)} style={{ ...S.btn, ...S.btnPrimary }}><Plus size={14} /> Add Chamber</button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+        {chambers.map(ch => {
+          const plan = plans[ch.plan?.toLowerCase()] || plans.starter;
+          return (
+            <div key={ch.id} style={{ ...S.card, borderColor: 'var(--border-mid)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ ...S.flexBetween }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(201,168,76,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Scale size={16} style={{ color: 'var(--gold)' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{ch.name}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>{ch.slug}</div>
+                  </div>
+                </div>
+                <span style={{ ...S.badge, background: `${plan.color}20`, color: plan.color }}>{plan.label}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
+                {ch.admin && <span>👤 {ch.admin}</span>}
+                {ch.email && <span>✉️ {ch.email}</span>}
+                {ch.phone && <span>📞 {ch.phone}</span>}
+                {ch.address && <span>📍 {ch.address}</span>}
+                <span>📅 Since {ch.created}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                <button style={{ ...S.btn, ...S.btnSecondary, fontSize: 11, padding: '4px 10px', flex: 1 }}>Manage</button>
+                {ch.id !== 'default' && <button onClick={() => del(ch.id)} style={{ ...S.btnGhost, color: 'var(--danger)' }}><Trash2 size={13} /></button>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {showAdd && (
+        <Modal title="Add New Chamber" onClose={() => setShowAdd(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={S.formGroup}><label style={S.label}>Chamber Name *</label><input style={S.input} value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Rahman & Associates" /></div>
+            <div style={S.formGroup}><label style={S.label}>Admin Name</label><input style={S.input} value={form.admin} onChange={e => setForm(p => ({ ...p, admin: e.target.value }))} /></div>
+            <div style={S.formGroup}><label style={S.label}>Email</label><input style={S.input} type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+            <div style={S.grid2}>
+              <div style={S.formGroup}><label style={S.label}>Phone</label><input style={S.input} value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
+              <div style={S.formGroup}><label style={S.label}>Plan</label>
+                <select style={S.input} value={form.plan} onChange={e => setForm(p => ({ ...p, plan: e.target.value }))}>
+                  <option value="starter">Starter</option><option value="pro">Professional</option><option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+            </div>
+            <div style={S.formGroup}><label style={S.label}>Address</label><input style={S.input} value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} /></div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowAdd(false)} style={{ ...S.btn, ...S.btnSecondary }}>Cancel</button>
+              <button onClick={add} style={{ ...S.btn, ...S.btnPrimary }}>Add Chamber</button>
             </div>
           </div>
         </Modal>
