@@ -67,6 +67,30 @@ const CHAT_RESPONSES = {
   family: 'Family law in Bangladesh is governed by personal law (Muslim Family Laws Ordinance 1961, Hindu Marriage Act) and the Family Courts Ordinance 1985. For divorce: Muslim women may seek Khul (judicial divorce). Dower (Mehr) is a right of the wife. Child custody is determined by the best interest of the child standard.',
 };
 
+// ─── PLAN LIMITS (edit these to control access per plan) ─────────────────────
+const PLAN_LIMITS = {
+  starter:    { maxAdvocates: 1, maxCases: 50,  maxDocs: 100, ai: false, billing: true,  label: 'Starter',      price: '৳999/mo'   },
+  pro:        { maxAdvocates: 5, maxCases: 500, maxDocs: 999, ai: true,  billing: true,  label: 'Professional', price: '৳2,499/mo' },
+  enterprise: { maxAdvocates: 99,maxCases: 9999,maxDocs: 9999,ai: true,  billing: true,  label: 'Enterprise',   price: '৳5,999/mo' },
+};
+
+function getPlanLimits(plan) {
+  return PLAN_LIMITS[(plan || 'starter').toLowerCase()] || PLAN_LIMITS.starter;
+}
+
+function getChamberStatus(chamber) {
+  if (!chamber) return 'active';
+  if (chamber.suspended) return 'suspended';
+  if (chamber.paidUntil) {
+    const due = new Date(chamber.paidUntil);
+    const now = new Date();
+    if (now > due) return 'expired';
+    const daysLeft = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
+    if (daysLeft <= 5) return 'expiring';
+  }
+  return 'active';
+}
+
 // ─── UTILITIES ────────────────────────────────────────────────────────────────
 function getStorage(key, fallback) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -341,7 +365,16 @@ function LoginPage({ onLogin }) {
     e.preventDefault();
     const users = getStorage('lb_users', INITIAL_USERS);
     const u = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === pass && u.active);
-    if (u) { onLogin(u); } else { setErr('Invalid credentials or account disabled.'); }
+    if (!u) { setErr('Invalid credentials or account disabled.'); return; }
+    // Check chamber subscription
+    const chambers = getStorage('lb_chambers', []);
+    const chamber = chambers.find(c => c.id === u.chamber);
+    if (chamber) {
+      const status = getChamberStatus(chamber);
+      if (status === 'suspended') { setErr('⛔ Your chamber subscription is suspended. Please contact support.'); return; }
+      if (status === 'expired') { setErr('⏰ Your subscription has expired. Please renew to continue.'); return; }
+    }
+    onLogin(u);
   };
 
   return (
@@ -551,6 +584,7 @@ function App() {
       <div style={S.main}>
         <Topbar title={titles[page]} user={user} />
         <div style={S.content}>
+          <SubscriptionBanner user={user} />
           <PageComp user={user} />
         </div>
       </div>
@@ -1992,85 +2026,266 @@ function SaasRegisterModal({ onClose }) {
   );
 }
 
+// ─── SUBSCRIPTION BANNER ─────────────────────────────────────────────────────
+function SubscriptionBanner({ user }) {
+  const chambers = getStorage('lb_chambers', []);
+  const chamber = chambers.find(c => c.id === user.chamber);
+  if (!chamber || user.role !== 'admin') return null;
+  const status = getChamberStatus(chamber);
+  if (status === 'active') return null;
+  const daysLeft = chamber.paidUntil ? Math.ceil((new Date(chamber.paidUntil) - new Date()) / 86400000) : 0;
+  const isExpiring = status === 'expiring';
+  return (
+    <div style={{ marginBottom: 16, padding: '10px 16px', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isExpiring ? 'rgba(201,168,76,0.12)' : 'rgba(224,82,82,0.12)', border: `1px solid ${isExpiring ? 'var(--gold-dim)' : 'rgba(224,82,82,0.4)'}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <AlertCircle size={16} style={{ color: isExpiring ? 'var(--gold)' : 'var(--danger)', flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: isExpiring ? 'var(--gold-light)' : 'var(--danger)' }}>
+            {isExpiring ? `⚠️ Subscription expiring in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}` : '⛔ Subscription Expired'}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {isExpiring ? 'Renew now to avoid service interruption.' : `Expired on ${chamber.paidUntil}. Renew to restore full access.`}
+          </div>
+        </div>
+      </div>
+      <button style={{ ...S.btn, background: isExpiring ? 'var(--gold)' : 'var(--danger)', color: 'white', border: 'none', fontSize: 12 }}>Renew Now</button>
+    </div>
+  );
+}
+
 // ─── CHAMBERS MODULE (Admin) ──────────────────────────────────────────────────
 function ChambersModule({ user }) {
-  const [chambers, setChambers] = useLocalState('lb_chambers', [{ id: 'default', name: 'LawBox Legal Associates', slug: 'default', plan: 'Pro', created: '2024-01-01', admin: 'Adv. Rahim Uddin', email: 'admin@lawbox.bd', phone: '+880 1700-000000', address: 'Dhaka, Bangladesh' }]);
+  const INIT_CHAMBERS = [{ id: 'default', name: 'LawBox Legal Associates', slug: 'default', plan: 'pro', created: '2024-01-01', paidUntil: '2025-12-31', suspended: false, admin: 'Adv. Rahim Uddin', email: 'admin@lawbox.bd', phone: '+880 1700-000000', address: 'Dhaka, Bangladesh' }];
+  const [chambers, setChambers] = useLocalState('lb_chambers', INIT_CHAMBERS);
+  const [allUsers] = useLocalState('lb_users', INITIAL_USERS);
+  const [selected, setSelected] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: '', admin: '', email: '', phone: '', address: '', plan: 'starter' });
+  const [form, setForm] = useState({ name: '', admin: '', email: '', phone: '', address: '', plan: 'starter', paidUntil: '', suspended: false });
+  const [tab, setTab] = useState('chambers');
 
-  const plans = { starter: { label: 'Starter', color: 'var(--info)' }, pro: { label: 'Professional', color: 'var(--gold)' }, enterprise: { label: 'Enterprise', color: '#9664c8' } };
+  const PLAN_COLORS = { starter: 'var(--info)', pro: 'var(--gold)', enterprise: '#9664c8' };
+
+  const updateChamber = (id, patch) => setChambers(p => p.map(c => c.id === id ? { ...c, ...patch } : c));
+  const del = (id) => { if (id === 'default') return; if (window.confirm('Delete this chamber?')) setChambers(p => p.filter(c => c.id !== id)); };
 
   const add = () => {
     if (!form.name) return;
-    setChambers(p => [...p, { ...form, id: Date.now().toString(), slug: form.name.toLowerCase().replace(/\s+/g, '-'), created: new Date().toISOString().split('T')[0] }]);
+    const id = Date.now().toString();
+    setChambers(p => [...p, { ...form, id, slug: form.name.toLowerCase().replace(/[^a-z0-9]/g, '-'), created: new Date().toISOString().split('T')[0] }]);
     setShowAdd(false);
-    setForm({ name: '', admin: '', email: '', phone: '', address: '', plan: 'starter' });
+    setForm({ name: '', admin: '', email: '', phone: '', address: '', plan: 'starter', paidUntil: '', suspended: false });
   };
 
-  const del = (id) => { if (id === 'default') return alert('Cannot delete default chamber'); setChambers(p => p.filter(c => c.id !== id)); };
+  // Manage modal
+  if (selected) {
+    const ch = chambers.find(c => c.id === selected);
+    if (!ch) { setSelected(null); return null; }
+    const limits = getPlanLimits(ch.plan);
+    const status = getChamberStatus(ch);
+    const chamberUsers = allUsers.filter(u => u.chamber === ch.id);
+    const advocateCount = chamberUsers.filter(u => u.role === 'advocate' || u.role === 'admin').length;
+    const statusColors = { active: 'var(--success)', expiring: 'var(--gold)', expired: 'var(--danger)', suspended: 'var(--danger)' };
+
+    return (
+      <div>
+        <button onClick={() => setSelected(null)} style={{ ...S.btn, ...S.btnSecondary, marginBottom: 16 }}><ChevronLeft size={14} /> All Chambers</button>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+          {/* Chamber info card */}
+          <div style={S.card}>
+            <div style={{ ...S.flexBetween, marginBottom: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--gold-light)' }}>{ch.name}</div>
+              <span style={{ ...S.badge, background: `${statusColors[status]}20`, color: statusColors[status], textTransform: 'capitalize' }}>{status}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                { label: 'Plan', val: <span style={{ ...S.badge, background: `${PLAN_COLORS[ch.plan?.toLowerCase()]}20`, color: PLAN_COLORS[ch.plan?.toLowerCase()] }}>{limits.label}</span> },
+                { label: 'Paid Until', val: ch.paidUntil || 'Not set' },
+                { label: 'Admin', val: ch.admin },
+                { label: 'Email', val: ch.email },
+                { label: 'Phone', val: ch.phone },
+                { label: 'Address', val: ch.address },
+                { label: 'Since', val: ch.created },
+              ].map(r => r.val && (
+                <div key={r.label} style={{ ...S.flexBetween, fontSize: 12 }}>
+                  <span style={{ color: 'var(--text-dim)' }}>{r.label}</span>
+                  <span style={{ color: 'var(--text)' }}>{r.val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Plan limits card */}
+          <div style={S.card}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-light)', marginBottom: 14 }}>Plan Limits & Usage</div>
+            {[
+              { label: 'Advocates', used: advocateCount, max: limits.maxAdvocates, icon: '👤' },
+              { label: 'Cases', used: getStorage('lb_cases', INITIAL_CASES).filter(c => c.chamberId === ch.id || ch.id === 'default').length, max: limits.maxCases, icon: '📁' },
+              { label: 'Documents', used: getStorage('lb_documents', INITIAL_DOCUMENTS).length, max: limits.maxDocs, icon: '📄' },
+            ].map(r => {
+              const pct = Math.min((r.used / r.max) * 100, 100);
+              const overLimit = r.used >= r.max;
+              return (
+                <div key={r.label} style={{ marginBottom: 12 }}>
+                  <div style={{ ...S.flexBetween, marginBottom: 4, fontSize: 12 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{r.icon} {r.label}</span>
+                    <span style={{ color: overLimit ? 'var(--danger)' : 'var(--text)', fontWeight: overLimit ? 600 : 400 }}>{r.used} / {r.max === 9999 ? '∞' : r.max}</span>
+                  </div>
+                  <div style={{ height: 6, background: 'var(--navy)', borderRadius: 3 }}>
+                    <div style={{ height: '100%', borderRadius: 3, width: `${pct}%`, background: overLimit ? 'var(--danger)' : pct > 80 ? 'var(--gold)' : 'var(--success)', transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--navy)', borderRadius: 6, fontSize: 12 }}>
+              <div style={{ ...S.flexBetween }}>
+                <span style={{ color: 'var(--text-muted)' }}>🤖 AI Assistant</span>
+                <span style={{ color: limits.ai ? 'var(--success)' : 'var(--danger)' }}>{limits.ai ? '✓ Enabled' : '✗ Disabled'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div style={S.card}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-light)', marginBottom: 14 }}>Subscription Controls</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div style={S.formGroup}>
+              <label style={S.label}>Change Plan</label>
+              <select style={S.input} value={ch.plan || 'starter'} onChange={e => updateChamber(ch.id, { plan: e.target.value })}>
+                {Object.entries(PLAN_LIMITS).map(([k, v]) => <option key={k} value={k}>{v.label} — {v.price} (max {v.maxAdvocates} advocate{v.maxAdvocates > 1 ? 's' : ''}, {v.maxCases === 9999 ? '∞' : v.maxCases} cases)</option>)}
+              </select>
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Paid Until (subscription expiry)</label>
+              <input style={S.input} type="date" value={ch.paidUntil || ''} onChange={e => updateChamber(ch.id, { paidUntil: e.target.value })} />
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Max Advocates Override</label>
+              <input style={S.input} type="number" min="1" max="999" value={ch.maxAdvocatesOverride || limits.maxAdvocates} onChange={e => updateChamber(ch.id, { maxAdvocatesOverride: Number(e.target.value) })} />
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Plan default: {limits.maxAdvocates}</span>
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Max Cases Override</label>
+              <input style={S.input} type="number" min="1" max="9999" value={ch.maxCasesOverride || (limits.maxCases === 9999 ? 9999 : limits.maxCases)} onChange={e => updateChamber(ch.id, { maxCasesOverride: Number(e.target.value) })} />
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Plan default: {limits.maxCases === 9999 ? 'Unlimited' : limits.maxCases}</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            {/* Quick renewal buttons */}
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>Quick Renew:</div>
+            {[1, 3, 6, 12].map(mo => (
+              <button key={mo} onClick={() => {
+                const base = ch.paidUntil && new Date(ch.paidUntil) > new Date() ? new Date(ch.paidUntil) : new Date();
+                base.setMonth(base.getMonth() + mo);
+                updateChamber(ch.id, { paidUntil: base.toISOString().split('T')[0] });
+              }} style={{ ...S.btn, ...S.btnSecondary, fontSize: 11, padding: '5px 10px' }}>+{mo}mo</button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <button onClick={() => updateChamber(ch.id, { suspended: !ch.suspended })} style={{ ...S.btn, background: ch.suspended ? 'rgba(76,175,125,0.15)' : 'rgba(224,82,82,0.15)', color: ch.suspended ? 'var(--success)' : 'var(--danger)', border: `1px solid ${ch.suspended ? 'rgba(76,175,125,0.3)' : 'rgba(224,82,82,0.3)'}`, fontSize: 12 }}>
+              {ch.suspended ? '✓ Reactivate' : '⛔ Suspend'}
+            </button>
+          </div>
+        </div>
+
+        {/* Users in this chamber */}
+        <div style={{ ...S.card, marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-light)', marginBottom: 12 }}>Chamber Users ({chamberUsers.length})</div>
+          {chamberUsers.length === 0
+            ? <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>No users linked to this chamber yet.</div>
+            : <table style={S.table}><thead><tr><th style={S.th}>Name</th><th style={S.th}>Email</th><th style={S.th}>Role</th><th style={S.th}>Status</th></tr></thead>
+              <tbody>{chamberUsers.map(u => <tr key={u.id}><td style={S.td}>{u.name}</td><td style={{ ...S.td, fontSize: 12, color: 'var(--text-muted)' }}>{u.email}</td><td style={S.td}><StatusBadge status={u.role} /></td><td style={S.td}><span style={{ ...S.badge, background: u.active ? 'rgba(76,175,125,0.12)' : 'rgba(224,82,82,0.12)', color: u.active ? 'var(--success)' : 'var(--danger)' }}>{u.active ? 'Active' : 'Disabled'}</span></td></tr>)}</tbody>
+            </table>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div style={{ ...S.flexBetween, marginBottom: 16 }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--gold-light)' }}>Chambers / Law Firms</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Manage all registered chambers on this LawBox instance</div>
-        </div>
-        <button onClick={() => setShowAdd(true)} style={{ ...S.btn, ...S.btnPrimary }}><Plus size={14} /> Add Chamber</button>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {['chambers', 'plans'].map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{ ...S.btn, fontSize: 12, background: tab === t ? 'rgba(201,168,76,0.12)' : 'transparent', border: tab === t ? '1px solid var(--gold-dim)' : '1px solid transparent', color: tab === t ? 'var(--gold)' : 'var(--text-muted)' }}>
+            {t === 'chambers' ? '🏛 Chambers' : '💰 Plans & Pricing'}
+          </button>
+        ))}
+        <div style={{ flex: 1 }} />
+        {tab === 'chambers' && <button onClick={() => setShowAdd(true)} style={{ ...S.btn, ...S.btnPrimary }}><Plus size={14} /> Add Chamber</button>}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-        {chambers.map(ch => {
-          const plan = plans[ch.plan?.toLowerCase()] || plans.starter;
-          return (
-            <div key={ch.id} style={{ ...S.card, borderColor: 'var(--border-mid)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ ...S.flexBetween }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(201,168,76,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Scale size={16} style={{ color: 'var(--gold)' }} />
-                  </div>
-                  <div>
+      {tab === 'plans' && (
+        <div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>Edit plan limits in <code style={{ background: 'var(--navy)', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>PLAN_LIMITS</code> inside App.js to control features per plan.</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+            {Object.entries(PLAN_LIMITS).map(([key, plan]) => (
+              <div key={key} style={{ ...S.card, borderColor: key === 'pro' ? 'var(--gold-dim)' : 'var(--border)' }}>
+                <div style={{ ...S.flexBetween, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 600, color: 'var(--gold-light)' }}>{plan.label}</div>
+                  <div style={{ fontWeight: 700, color: 'var(--gold)', fontSize: 14 }}>{plan.price}</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                  <div style={{ ...S.flexBetween }}><span style={{ color: 'var(--text-muted)' }}>Max Advocates</span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{plan.maxAdvocates}</span></div>
+                  <div style={{ ...S.flexBetween }}><span style={{ color: 'var(--text-muted)' }}>Max Cases</span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{plan.maxCases === 9999 ? 'Unlimited' : plan.maxCases}</span></div>
+                  <div style={{ ...S.flexBetween }}><span style={{ color: 'var(--text-muted)' }}>Max Documents</span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{plan.maxDocs === 9999 ? 'Unlimited' : plan.maxDocs}</span></div>
+                  <div style={{ ...S.flexBetween }}><span style={{ color: 'var(--text-muted)' }}>AI Assistant</span><span style={{ color: plan.ai ? 'var(--success)' : 'var(--danger)' }}>{plan.ai ? '✓ Yes' : '✗ No'}</span></div>
+                  <div style={{ ...S.flexBetween }}><span style={{ color: 'var(--text-muted)' }}>Billing Module</span><span style={{ color: plan.billing ? 'var(--success)' : 'var(--danger)' }}>{plan.billing ? '✓ Yes' : '✗ No'}</span></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'chambers' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {chambers.map(ch => {
+            const limits = getPlanLimits(ch.plan);
+            const status = getChamberStatus(ch);
+            const statusColors = { active: 'var(--success)', expiring: 'var(--gold)', expired: 'var(--danger)', suspended: 'var(--danger)' };
+            const daysLeft = ch.paidUntil ? Math.ceil((new Date(ch.paidUntil) - new Date()) / 86400000) : null;
+            return (
+              <div key={ch.id} style={{ ...S.card, borderColor: 'var(--border-mid)', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }} onClick={() => setSelected(ch.id)}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, background: 'rgba(201,168,76,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Scale size={18} style={{ color: 'var(--gold)' }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ ...S.flexBetween }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{ch.name}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }}>{ch.slug}</div>
+                    <span style={{ ...S.badge, background: `${statusColors[status]}20`, color: statusColors[status], textTransform: 'capitalize', flexShrink: 0 }}>{status}{status === 'expiring' ? ` (${daysLeft}d)` : ''}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                    {limits.label} · {ch.paidUntil ? `Paid until ${ch.paidUntil}` : 'No expiry set'} · {limits.maxAdvocates} advocate{limits.maxAdvocates > 1 ? 's' : ''} · {ch.email || 'No email'}
                   </div>
                 </div>
-                <span style={{ ...S.badge, background: `${plan.color}20`, color: plan.color }}>{plan.label}</span>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                  <button onClick={() => setSelected(ch.id)} style={{ ...S.btn, ...S.btnSecondary, fontSize: 11, padding: '4px 12px' }}>Manage</button>
+                  {ch.id !== 'default' && <button onClick={() => del(ch.id)} style={{ ...S.btnGhost, color: 'var(--danger)' }}><Trash2 size={13} /></button>}
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
-                {ch.admin && <span>👤 {ch.admin}</span>}
-                {ch.email && <span>✉️ {ch.email}</span>}
-                {ch.phone && <span>📞 {ch.phone}</span>}
-                {ch.address && <span>📍 {ch.address}</span>}
-                <span>📅 Since {ch.created}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                <button style={{ ...S.btn, ...S.btnSecondary, fontSize: 11, padding: '4px 10px', flex: 1 }}>Manage</button>
-                {ch.id !== 'default' && <button onClick={() => del(ch.id)} style={{ ...S.btnGhost, color: 'var(--danger)' }}><Trash2 size={13} /></button>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {showAdd && (
-        <Modal title="Add New Chamber" onClose={() => setShowAdd(false)}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={S.formGroup}><label style={S.label}>Chamber Name *</label><input style={S.input} value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Rahman & Associates" /></div>
+        <Modal title="Add New Chamber" onClose={() => setShowAdd(false)} wide>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ ...S.formGroup, gridColumn: '1 / -1' }}><label style={S.label}>Chamber Name *</label><input style={S.input} value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Rahman & Associates" /></div>
             <div style={S.formGroup}><label style={S.label}>Admin Name</label><input style={S.input} value={form.admin} onChange={e => setForm(p => ({ ...p, admin: e.target.value }))} /></div>
             <div style={S.formGroup}><label style={S.label}>Email</label><input style={S.input} type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-            <div style={S.grid2}>
-              <div style={S.formGroup}><label style={S.label}>Phone</label><input style={S.input} value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
-              <div style={S.formGroup}><label style={S.label}>Plan</label>
-                <select style={S.input} value={form.plan} onChange={e => setForm(p => ({ ...p, plan: e.target.value }))}>
-                  <option value="starter">Starter</option><option value="pro">Professional</option><option value="enterprise">Enterprise</option>
-                </select>
-              </div>
+            <div style={S.formGroup}><label style={S.label}>Phone</label><input style={S.input} value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
+            <div style={S.formGroup}><label style={S.label}>Plan</label>
+              <select style={S.input} value={form.plan} onChange={e => setForm(p => ({ ...p, plan: e.target.value }))}>
+                {Object.entries(PLAN_LIMITS).map(([k, v]) => <option key={k} value={k}>{v.label} — {v.price}</option>)}
+              </select>
             </div>
-            <div style={S.formGroup}><label style={S.label}>Address</label><input style={S.input} value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} /></div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowAdd(false)} style={{ ...S.btn, ...S.btnSecondary }}>Cancel</button>
-              <button onClick={add} style={{ ...S.btn, ...S.btnPrimary }}>Add Chamber</button>
-            </div>
+            <div style={S.formGroup}><label style={S.label}>Paid Until</label><input style={S.input} type="date" value={form.paidUntil} onChange={e => setForm(p => ({ ...p, paidUntil: e.target.value }))} /></div>
+            <div style={{ ...S.formGroup, gridColumn: '1 / -1' }}><label style={S.label}>Address</label><input style={S.input} value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} /></div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+            <button onClick={() => setShowAdd(false)} style={{ ...S.btn, ...S.btnSecondary }}>Cancel</button>
+            <button onClick={add} style={{ ...S.btn, ...S.btnPrimary }}>Add Chamber</button>
           </div>
         </Modal>
       )}
