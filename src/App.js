@@ -192,6 +192,140 @@ function Modal({ title, onClose, children, wide }) {
   );
 }
 
+// ─── FORGOT PASSWORD MODAL ───────────────────────────────────────────────────
+function ForgotPasswordModal({ onClose }) {
+  const [step, setStep] = useState(1); // 1=email, 2=security Q, 3=new pass
+  const [email, setEmail] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [err, setErr] = useState('');
+  const [foundUser, setFoundUser] = useState(null);
+
+  const SECURITY_QUESTIONS = [
+    "What is your mother's maiden name?",
+    "What was the name of your first school?",
+    "What is your Bar Council registration year?",
+    "What city were you born in?",
+  ];
+
+  const findUser = () => {
+    const users = getStorage('lb_users', INITIAL_USERS);
+    const u = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.active);
+    if (!u) { setErr('No active account found with this email.'); return; }
+    setFoundUser(u);
+    setErr('');
+    setStep(2);
+  };
+
+  const checkAnswer = () => {
+    // For demo: accept any non-empty answer OR check stored answer
+    if (!answer.trim()) { setErr('Please enter your answer.'); return; }
+    const stored = foundUser.securityAnswer || 'lawbox';
+    if (answer.toLowerCase().trim() === stored.toLowerCase().trim()) {
+      setErr(''); setStep(3);
+    } else {
+      setErr('Incorrect answer. Hint: default answer is "lawbox"');
+    }
+  };
+
+  const resetPassword = () => {
+    if (newPass.length < 6) { setErr('Password must be at least 6 characters.'); return; }
+    const users = getStorage('lb_users', INITIAL_USERS);
+    const updated = users.map(u => u.id === foundUser.id ? { ...u, password: newPass } : u);
+    setStorage('lb_users', updated);
+    setStep(4);
+  };
+
+  return (
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...S.modal, maxWidth: 420 }}>
+        <div style={{ ...S.flexBetween, marginBottom: 20 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--gold-light)' }}>
+            {step === 4 ? 'Password Reset!' : 'Forgot Password'}
+          </h3>
+          <button onClick={onClose} style={S.btnGhost}><X size={16} /></button>
+        </div>
+
+        {/* Progress dots */}
+        {step < 4 && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 20, justifyContent: 'center' }}>
+            {[1,2,3].map(s => (
+              <div key={s} style={{ width: s === step ? 20 : 8, height: 8, borderRadius: 4, background: s <= step ? 'var(--gold)' : 'var(--navy)', transition: 'all 0.2s' }} />
+            ))}
+          </div>
+        )}
+
+        {step === 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 4 }}>Enter your registered email address and we will verify your identity.</p>
+            <div style={S.formGroup}>
+              <label style={S.label}>Email Address</label>
+              <input style={S.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" autoFocus />
+            </div>
+            {err && <p style={{ color: 'var(--danger)', fontSize: 12 }}>{err}</p>}
+            <button onClick={findUser} style={{ ...S.btn, ...S.btnPrimary, justifyContent: 'center' }}>Continue →</button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ padding: '10px 12px', background: 'rgba(201,168,76,0.08)', borderRadius: 6, border: '1px solid var(--border-mid)' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Account found</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{foundUser?.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{foundUser?.email}</div>
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Security Question</label>
+              <div style={{ padding: '10px 12px', background: 'var(--navy)', borderRadius: 6, fontSize: 13, color: 'var(--text)', borderLeft: '3px solid var(--gold-dim)' }}>
+                {foundUser?.securityQuestion || SECURITY_QUESTIONS[0]}
+              </div>
+            </div>
+            <div style={S.formGroup}>
+              <label style={S.label}>Your Answer</label>
+              <input style={S.input} value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Enter your answer" onKeyDown={e => e.key === 'Enter' && checkAnswer()} autoFocus />
+            </div>
+            {err && <p style={{ color: 'var(--danger)', fontSize: 12 }}>{err}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setStep(1)} style={{ ...S.btn, ...S.btnSecondary }}>← Back</button>
+              <button onClick={checkAnswer} style={{ ...S.btn, ...S.btnPrimary, flex: 1, justifyContent: 'center' }}>Verify →</button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Identity verified! Set your new password.</p>
+            <div style={S.formGroup}>
+              <label style={S.label}>New Password</label>
+              <div style={{ position: 'relative' }}>
+                <input style={{ ...S.input, paddingRight: 40 }} type={showNew ? 'text' : 'password'} value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Minimum 6 characters" autoFocus />
+                <button type="button" onClick={() => setShowNew(p => !p)} style={{ position: 'absolute', right: 10, top: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 0 }}>
+                  <Eye size={15} />
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
+                Strength: {newPass.length === 0 ? '—' : newPass.length < 6 ? '⚠️ Too short' : newPass.length < 10 ? '🟡 Medium' : '🟢 Strong'}
+              </div>
+            </div>
+            {err && <p style={{ color: 'var(--danger)', fontSize: 12 }}>{err}</p>}
+            <button onClick={resetPassword} style={{ ...S.btn, ...S.btnPrimary, justifyContent: 'center' }}>Reset Password</button>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--gold-light)', marginBottom: 8 }}>Password Reset Successful!</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>You can now login with your new password.</div>
+            <button onClick={onClose} style={{ ...S.btn, ...S.btnPrimary, justifyContent: 'center' }}>Go to Login</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
 function LoginPage({ onLogin }) {
   const [email, setEmail] = useState('');
@@ -199,71 +333,111 @@ function LoginPage({ onLogin }) {
   const [showPass, setShowPass] = useState(false);
   const [err, setErr] = useState('');
   const [showSaas, setShowSaas] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [selectedChamber, setSelectedChamber] = useState(null);
   const chambers = getStorage('lb_chambers', [{ id: 'default', name: 'LawBox Legal Associates', slug: 'default', plan: 'Pro', created: '2024-01-01' }]);
-  const users = getStorage('lb_users', INITIAL_USERS);
 
   const handle = (e) => {
     e.preventDefault();
-    const u = users.find(u => u.email === email && u.password === pass && u.active);
+    const users = getStorage('lb_users', INITIAL_USERS);
+    const u = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === pass && u.active);
     if (u) { onLogin(u); } else { setErr('Invalid credentials or account disabled.'); }
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--navy)' }}>
-      <div style={{ width: 400 }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 }}>
-            <Scale size={28} style={{ color: 'var(--gold)' }} />
-            <span style={{ fontSize: 26, fontWeight: 700, color: 'var(--gold-light)', letterSpacing: '0.05em' }}>LAWBOX</span>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--navy)' }}>
+      {/* Left panel */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+        <div style={{ width: '100%', maxWidth: 400 }}>
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 6 }}>
+              <Scale size={28} style={{ color: 'var(--gold)' }} />
+              <span style={{ fontSize: 26, fontWeight: 700, color: 'var(--gold-light)', letterSpacing: '0.05em' }}>LAWBOX</span>
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Legal Practice Management · SaaS Platform</p>
           </div>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Legal Practice Management · SaaS Platform</p>
-        </div>
 
-        {/* Chamber selector */}
-        <div style={{ marginBottom: 12, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {chambers.map(ch => (
-            <div key={ch.id} style={{ padding: '4px 12px', borderRadius: 12, border: '1px solid var(--border-mid)', fontSize: 12, color: 'var(--gold-dim)', background: 'rgba(201,168,76,0.08)' }}>
-              🏛 {ch.name}
+          {/* Chamber pills */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, textAlign: 'center' }}>SELECT YOUR CHAMBER</div>
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {chambers.map(ch => (
+                <button key={ch.id} onClick={() => setSelectedChamber(ch.id === selectedChamber ? null : ch.id)} style={{
+                  padding: '5px 12px', borderRadius: 12, fontSize: 12, cursor: 'pointer',
+                  border: selectedChamber === ch.id ? '1px solid var(--gold)' : '1px solid var(--border-mid)',
+                  background: selectedChamber === ch.id ? 'rgba(201,168,76,0.15)' : 'rgba(201,168,76,0.05)',
+                  color: selectedChamber === ch.id ? 'var(--gold)' : 'var(--text-muted)',
+                }}>🏛 {ch.name}</button>
+              ))}
+              <button onClick={() => setShowSaas(true)} style={{ padding: '5px 12px', borderRadius: 12, border: '1px dashed var(--border)', fontSize: 12, color: 'var(--text-dim)', background: 'transparent', cursor: 'pointer' }}>
+                + New Chamber
+              </button>
             </div>
-          ))}
-          <button onClick={() => setShowSaas(true)} style={{ padding: '4px 12px', borderRadius: 12, border: '1px dashed var(--border-mid)', fontSize: 12, color: 'var(--text-dim)', background: 'transparent', cursor: 'pointer' }}>
-            + New Chamber
-          </button>
-        </div>
+          </div>
 
-        <div style={{ ...S.card, borderColor: 'var(--border-mid)' }}>
-          <form onSubmit={handle} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={S.formGroup}>
-              <label style={S.label}>Email Address</label>
-              <input style={S.input} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter your email" autoComplete="email" />
-            </div>
-            <div style={S.formGroup}>
-              <label style={S.label}>Password</label>
-              <div style={{ position: 'relative' }}>
-                <input style={{ ...S.input, paddingRight: 40 }} type={showPass ? 'text' : 'password'} value={pass} onChange={e => setPass(e.target.value)} placeholder="Enter your password" autoComplete="current-password" />
-                <button type="button" onClick={() => setShowPass(p => !p)} style={{ position: 'absolute', right: 10, top: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 0 }}>
-                  <Eye size={15} />
-                </button>
+          <div style={{ ...S.card, borderColor: 'var(--border-mid)' }}>
+            <form onSubmit={handle} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={S.formGroup}>
+                <label style={S.label}>Email Address</label>
+                <input style={S.input} type="email" value={email} onChange={e => { setEmail(e.target.value); setErr(''); }} placeholder="Enter your email" autoComplete="email" />
               </div>
+              <div style={S.formGroup}>
+                <div style={{ ...S.flexBetween, marginBottom: 6 }}>
+                  <label style={S.label}>Password</label>
+                  <button type="button" onClick={() => setShowForgot(true)} style={{ background: 'none', border: 'none', color: 'var(--gold-dim)', cursor: 'pointer', fontSize: 11, padding: 0 }}>
+                    Forgot password?
+                  </button>
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <input style={{ ...S.input, paddingRight: 40, width: '100%' }} type={showPass ? 'text' : 'password'} value={pass} onChange={e => { setPass(e.target.value); setErr(''); }} placeholder="Enter your password" autoComplete="current-password" />
+                  <button type="button" onClick={() => setShowPass(p => !p)} style={{ position: 'absolute', right: 10, top: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 0 }}>
+                    <Eye size={15} />
+                  </button>
+                </div>
+              </div>
+              {err && <p style={{ color: 'var(--danger)', fontSize: 12, margin: 0 }}>{err}</p>}
+              <button type="submit" style={{ ...S.btn, ...S.btnPrimary, width: '100%', justifyContent: 'center', padding: '10px 14px', fontSize: 14 }}>
+                Sign In →
+              </button>
+            </form>
+
+            <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--navy)', borderRadius: 6, fontSize: 11, color: 'var(--text-dim)' }}>
+              <strong style={{ color: 'var(--text-muted)' }}>Demo credentials:</strong><br />
+              admin@lawbox.bd / admin123 &nbsp;·&nbsp; advocate@lawbox.bd / adv123<br />
+              clerk@lawbox.bd / clerk123 &nbsp;·&nbsp; client@lawbox.bd / client123<br />
+              <span style={{ color: 'var(--gold-dim)', marginTop: 4, display: 'block' }}>💡 New chamber admin: use the email & password you set during registration</span>
             </div>
-            {err && <p style={{ color: 'var(--danger)', fontSize: 12, margin: 0 }}>{err}</p>}
-            <button type="submit" style={{ ...S.btn, ...S.btnPrimary, width: '100%', justifyContent: 'center', padding: '10px 14px', fontSize: 14 }}>
-              Sign In
-            </button>
-          </form>
-          <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--navy)', borderRadius: 6, fontSize: 11, color: 'var(--text-dim)' }}>
-            <strong style={{ color: 'var(--text-muted)' }}>Demo accounts:</strong><br />
-            admin@lawbox.bd / admin123 · advocate@lawbox.bd / adv123<br />
-            clerk@lawbox.bd / clerk123 · client@lawbox.bd / client123
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: 'var(--text-dim)' }}>
+            New to LawBox? <button onClick={() => setShowSaas(true)} style={{ background: 'none', border: 'none', color: 'var(--gold-dim)', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>Register your chamber free</button>
           </div>
         </div>
+      </div>
 
-        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: 'var(--text-dim)' }}>
-          Want your own chamber? <button onClick={() => setShowSaas(true)} style={{ background: 'none', border: 'none', color: 'var(--gold-dim)', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>Register here</button>
+      {/* Right decorative panel */}
+      <div style={{ width: 320, background: 'var(--surface)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+        <Scale size={48} style={{ color: 'var(--gold-dim)', marginBottom: 20, opacity: 0.4 }} />
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--gold-light)', marginBottom: 12, textAlign: 'center' }}>LawBox SaaS</div>
+        {[
+          '⚖️ Complete Case Management',
+          '📅 Hearing Calendar & Cause List',
+          '📄 Document Generator',
+          '🤖 AI Legal Assistant',
+          '💰 Billing & Invoicing',
+          '🏛 Multi-Chamber Support',
+          '🔐 Role-Based Access Control',
+        ].map(f => (
+          <div key={f} style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, width: '100%' }}>{f}</div>
+        ))}
+        <div style={{ marginTop: 20, padding: '10px 14px', background: 'rgba(201,168,76,0.08)', borderRadius: 8, border: '1px solid var(--border)', textAlign: 'center', width: '100%' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Registered Chambers</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--gold)', marginTop: 4 }}>{chambers.length}</div>
         </div>
       </div>
 
       {showSaas && <SaasRegisterModal onClose={() => setShowSaas(false)} />}
+      {showForgot && <ForgotPasswordModal onClose={() => setShowForgot(false)} />}
     </div>
   );
 }
@@ -1725,7 +1899,7 @@ function SaasRegisterModal({ onClose }) {
     setStorage('lb_chambers', [...chambers, newChamber]);
 
     const users = getStorage('lb_users', INITIAL_USERS);
-    const newUser = { id: Date.now(), name: form.adminName || form.chamberName + ' Admin', email: form.email, password: form.password, role: 'admin', active: true, barId: form.barId, chamber: newChamber.id };
+    const newUser = { id: Date.now(), name: form.adminName || form.chamberName + ' Admin', email: form.email, password: form.password, role: 'admin', active: true, barId: form.barId, chamber: newChamber.id, securityQuestion: form.securityQuestion, securityAnswer: form.securityAnswer || 'lawbox' };
     setStorage('lb_users', [...users, newUser]);
     setDone(true);
   };
@@ -1791,7 +1965,19 @@ function SaasRegisterModal({ onClose }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={S.formGroup}><label style={S.label}>Admin Full Name *</label><input style={S.input} value={form.adminName} onChange={e => setForm(p => ({ ...p, adminName: e.target.value }))} placeholder="Adv. Your Name" /></div>
                 <div style={S.formGroup}><label style={S.label}>Email Address *</label><input style={S.input} type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="admin@yourchamber.com" /></div>
-                <div style={S.formGroup}><label style={S.label}>Password *</label><input style={S.input} type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Set a strong password" /></div>
+                <div style={S.formGroup}><label style={S.label}>Password *</label>
+                  <input style={S.input} type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Minimum 6 characters" />
+                </div>
+                <div style={S.formGroup}><label style={S.label}>Security Question (for password recovery)</label>
+                  <select style={S.input} value={form.securityQuestion || ''} onChange={e => setForm(p => ({ ...p, securityQuestion: e.target.value }))}>
+                    <option value="">Select a question...</option>
+                    <option>What is your mother's maiden name?</option>
+                    <option>What was the name of your first school?</option>
+                    <option>What is your Bar Council registration year?</option>
+                    <option>What city were you born in?</option>
+                  </select>
+                </div>
+                <div style={S.formGroup}><label style={S.label}>Security Answer</label><input style={S.input} value={form.securityAnswer || ''} onChange={e => setForm(p => ({ ...p, securityAnswer: e.target.value }))} placeholder="Your answer (remembered for recovery)" /></div>
                 <div style={S.formGroup}><label style={S.label}>Bar Council ID (optional)</label><input style={S.input} value={form.barId} onChange={e => setForm(p => ({ ...p, barId: e.target.value }))} placeholder="BAR-XXXX-XXX" /></div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
                   <button onClick={() => setStep(2)} style={{ ...S.btn, ...S.btnSecondary }}>← Back</button>
